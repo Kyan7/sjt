@@ -1,7 +1,12 @@
 package bg.sofia.uni.fmi.mjt.tagger;
 
-import java.io.*;
-import java.util.*;
+import bg.sofia.uni.fmi.mjt.tagger.containers.CaseInsensitiveString;
+
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Scanner;
 
 public class Main {
     static final String OPENING_COUNTRY_TAG_FRAG_1 = "<city country=\"";
@@ -10,122 +15,77 @@ public class Main {
 
     public static void main(String[] args) throws IOException {
         BufferedReader citiesReader = new BufferedReader(new FileReader("C:\\Users\\Kaloyan\\Desktop\\world-cities.csv"));
-        HashMap<String, HashMap<String, Integer>> data = new HashMap<>();
-        StringBuilder city = new StringBuilder();
-        StringBuilder country = new StringBuilder();
-
-        int symbolAsNumber;
-        char symbolAsChar;
-        boolean makingCity = true;
-        while ((symbolAsNumber = citiesReader.read()) != -1) {
-            symbolAsChar = (char) symbolAsNumber;
-            if (makingCity) {
-                if (symbolAsChar != ',') {
-                    city.append(symbolAsChar);
-                } else {
-                    makingCity = false;
-                }
-            } else {
-                if (symbolAsChar != '\n') {
-                    country.append(symbolAsChar);
-                } else {
-                    makingCity = true;
-                    data.putIfAbsent(country.toString(), new HashMap<>());
-                    data.get(country.toString()).put(city.toString(), 0);
-                    country = new StringBuilder();
-                    city = new StringBuilder();
-                }
+        HashMap<String, HashMap<CaseInsensitiveString, Integer>> data = new HashMap<>();
+        try (Scanner sc = new Scanner(citiesReader)) {
+            while (sc.hasNext()) {
+                String[] tokens = sc.nextLine().split(",");
+                String city = tokens[0];
+                String country = tokens[1];
+                data.putIfAbsent(country.toString(), new HashMap<>());
+                data.get(country.toString()).put(new CaseInsensitiveString(city.toString()), 0);
             }
         }
 
         BufferedReader text = new BufferedReader(new FileReader("C:\\Users\\Kaloyan\\Desktop\\test.txt"));
 
-        StringBuilder line = new StringBuilder();
-        while ((symbolAsNumber = text.read()) != -1) {
-            symbolAsChar = (char) symbolAsNumber;
-            if (symbolAsChar != '\n') {
-                line.append(symbolAsChar);
-            } else {
-                String str = line.toString();
+        StringBuilder output = new StringBuilder();
+        for (String countryKey : data.keySet()) {
+            HashMap<CaseInsensitiveString, Integer> countryData = data.get(countryKey);
+            countryData.replaceAll((k, v) -> 0);
+        }
+        try (Scanner sc = new Scanner(text)) {
+            while (sc.hasNext()) {
+                String line = sc.nextLine();
+                String uppercaseLine = line.toUpperCase();
                 for (String countryKey : data.keySet()) {
-                    HashMap<String, Integer> countryData = data.get(countryKey);
-                    for (String cityKey : countryData.keySet()) {
+                    HashMap<CaseInsensitiveString, Integer> countryData = data.get(countryKey);
+                    for (CaseInsensitiveString cityKey : countryData.keySet()) {
                         int lastOpeningTagStartIndex = 0;
                         int lastTempEndIndex = 0;
+                        int extraIndex = -1;
                         while (lastOpeningTagStartIndex != -1) {
-                            int openingTagStartIndex = str.indexOf(cityKey, lastTempEndIndex);
+                            int openingTagStartIndex = uppercaseLine.indexOf(cityKey.getString().toUpperCase(), lastTempEndIndex);
                             if (openingTagStartIndex != -1) {
-                                int closingTagStartIndex = openingTagStartIndex + cityKey.length();
-                                String openingTag = OPENING_COUNTRY_TAG_FRAG_1 + countryKey + OPENING_COUNTRY_TAG_FRAG_2;
+                                int closingTagStartIndex = openingTagStartIndex + cityKey.getString().toUpperCase().length();
+                                if (!Character.isAlphabetic(uppercaseLine.charAt(closingTagStartIndex))) {
+                                    String openingTag = OPENING_COUNTRY_TAG_FRAG_1 + countryKey + OPENING_COUNTRY_TAG_FRAG_2;
 
-                                String temp = str.substring(0, openingTagStartIndex) +
-                                        openingTag +
-                                        str.substring(openingTagStartIndex, closingTagStartIndex) +
-                                        CLOSING_COUNTRY_TAG;
+                                    String temp = line.substring(0, openingTagStartIndex) +
+                                            openingTag +
+                                            line.substring(openingTagStartIndex, closingTagStartIndex) +
+                                            CLOSING_COUNTRY_TAG;
 
-                                str = temp +
-                                        str.substring(closingTagStartIndex);
+                                    String uppercaseTemp = uppercaseLine.substring(0, openingTagStartIndex) +
+                                            openingTag +
+                                            uppercaseLine.substring(openingTagStartIndex, closingTagStartIndex) +
+                                            CLOSING_COUNTRY_TAG;
 
-                                int count = countryData.get(cityKey);
-                                countryData.put(cityKey, ++count);
-                                lastTempEndIndex = temp.length();
+                                    line = temp +
+                                            line.substring(closingTagStartIndex);
+
+                                    uppercaseLine = uppercaseTemp +
+                                            uppercaseLine.substring(closingTagStartIndex);
+
+                                    int count = countryData.get(cityKey);
+                                    countryData.put(cityKey, ++count);
+                                    extraIndex = temp.length();
+                                } else {
+                                    extraIndex = -1;
+                                }
+                                if (extraIndex != -1) {
+                                    lastTempEndIndex = extraIndex;
+                                } else {
+                                    lastTempEndIndex = line.length();
+                                }
+                                lastOpeningTagStartIndex = openingTagStartIndex;
+                            } else {
+                                lastOpeningTagStartIndex = -1;
                             }
-                            lastOpeningTagStartIndex = openingTagStartIndex;
                         }
                     }
                 }
-                System.out.println(str);
-                line = new StringBuilder();
+                output.append(line);
             }
-        }
-
-        String str = line.toString();
-        for (String countryKey : data.keySet()) {
-            HashMap<String, Integer> countryData = data.get(countryKey);
-            for (String cityKey : countryData.keySet()) {
-                int lastOpeningTagStartIndex = 0;
-                int lastTempEndIndex = 0;
-                while (lastOpeningTagStartIndex != -1) {
-                    int openingTagStartIndex = str.indexOf(cityKey, lastTempEndIndex);
-                    if (openingTagStartIndex != -1) {
-                        int closingTagStartIndex = openingTagStartIndex + cityKey.length();
-                        String openingTag = OPENING_COUNTRY_TAG_FRAG_1 + countryKey + OPENING_COUNTRY_TAG_FRAG_2;
-
-                        String temp = str.substring(0, openingTagStartIndex) +
-                                openingTag +
-                                str.substring(openingTagStartIndex, closingTagStartIndex) +
-                                CLOSING_COUNTRY_TAG;
-
-                        str = temp +
-                                str.substring(closingTagStartIndex);
-
-                        int count = countryData.get(cityKey);
-                        countryData.put(cityKey, ++count);
-                        lastTempEndIndex = temp.length();
-                    }
-                    lastOpeningTagStartIndex = openingTagStartIndex;
-                }
-            }
-        }
-        System.out.println(str);
-
-        Map<String, Integer> taggedCities = new HashMap<>();
-        for (String countryKey : data.keySet()) {
-            HashMap<String, Integer> countryData = data.get(countryKey);
-            for (String cityKey : countryData.keySet()) {
-                int tagCount = countryData.get(cityKey);
-                if (tagCount > 0) {
-                    taggedCities.put(cityKey, tagCount);
-                }
-            }
-        }
-
-        List<String> result = new ArrayList<>(taggedCities.keySet());
-        result.sort(Comparator.comparing(taggedCities::get).reversed());
-
-        result = 10 <= result.size() ? result.subList(0, 10) : result.subList(0, result.size());
-        for (int i = 0; i < result.size(); i++) {
-            System.out.println(result.get(i));
         }
     }
 }
